@@ -9,19 +9,24 @@ import '../database/db_helper.dart';
 import '../model/user.dart';
 import 'DontFollow.dart';
 
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends StatefulWidget {
+  @override
+  _ProfilePageState createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
   final dbHelper = DatabaseHelper();
   List<User> usersFollowing = [];
   List<User> usersFollowers = [];
+  bool followingLoaded = false;
+  List<String> followersFilesLoaded = [];
 
   Future<bool> _requestStoragePermission(BuildContext context) async {
     try {
-      // Check Android version and request appropriate permissions
       if (Platform.isAndroid) {
         DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
         AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
         if (androidInfo.version.sdkInt >= 33) {
-          // Android 13+ (API 33+)
           var status = await Permission.photos.status;
           if (status.isDenied) {
             var result = await Permission.photos.request();
@@ -35,7 +40,6 @@ class ProfilePage extends StatelessWidget {
             }
           }
         } else {
-          // Android 12 and below
           var status = await Permission.storage.status;
           if (status.isDenied) {
             var result = await Permission.storage.request();
@@ -204,9 +208,56 @@ class ProfilePage extends StatelessWidget {
     }
   }
 
-  /// non followers Back
+  Future<void> _selectMultipleFollowersFiles(BuildContext context) async {
+    bool hasPermission = await _requestStoragePermission(context);
+    if (!hasPermission) {
+      return;
+    }
 
-  Future<void> _selectFileDontFollowBack(BuildContext context, String fileName) async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        allowMultiple: true,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        usersFollowers.clear();
+        followersFilesLoaded.clear();
+        
+        for (var platformFile in result.files) {
+          File file = File(platformFile.path!);
+          String fileName = platformFile.name;
+          String jsonString = await file.readAsString();
+
+          List<User> users = processJsonDataFollowers(jsonString, fileName);
+          usersFollowers.addAll(users);
+          followersFilesLoaded.add(fileName);
+        }
+
+        usersFollowers = removeDuplicateUsers(usersFollowers);
+
+        setState(() {});
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${followersFilesLoaded.length} followers file(s) loaded successfully! ${usersFollowers.length} unique users found.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      print('File selection error: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error selecting files: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _selectFileDontFollowBack(BuildContext context, String fileType) async {
     bool hasPermission = await _requestStoragePermission(context);
     if (!hasPermission) {
       return;
@@ -220,15 +271,20 @@ class ProfilePage extends StatelessWidget {
 
       if (result != null) {
         File file = File(result.files.single.path!);
+        String fileName = result.files.single.name;
         String jsonString = await file.readAsString();
 
-        // Process the JSON data based on the file name (following or followers)
-        List<User> users = processJsonDataDontFollowBack(jsonString, fileName);
+        if (fileType == 'following') {
+          List<User> users = processJsonDataFollowing(jsonString, fileName);
+          usersFollowing = users;
+          followingLoaded = true;
+        }
         
-        // Show success message
+        setState(() {});
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${fileName} loaded successfully! ${users.length} users found.'),
+            content: Text('$fileName loaded successfully! ${fileType == 'following' ? usersFollowing.length : usersFollowers.length} users found.'),
             backgroundColor: Colors.green,
           ),
         );
@@ -244,48 +300,27 @@ class ProfilePage extends StatelessWidget {
     }
   }
 
-  List<User> processJsonDataDontFollowBack(String jsonString, String fileName) {
+  List<User> processJsonDataFollowing(String jsonString, String fileName) {
     try {
       final data = jsonDecode(jsonString);
       List<User> users = [];
 
-      if (fileName == 'following.json') {
-        if (data['relationships_following'] != null) {
-          for (var request in data['relationships_following']) {
-            if (request['string_list_data'] != null) {
-              for (var user in request['string_list_data']) {
-                DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(user['timestamp'] * 1000);
-                String formattedDate =
-                    "${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')} ";
-
-                usersFollowing.add(User(
-                  username: user['value'],
-                  link: user['href'],
-                  date: formattedDate,
-                ));
-              }
-            }
-          }
-        }
-        users = usersFollowing;
-      } else {
-        // Process followers.json
-        if (data is List) {
-          for (var user in data) {
-            if (user is Map && user.containsKey('string_list_data') && user['string_list_data'] is List && user['string_list_data'].isNotEmpty) {
-              DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(user['string_list_data'][0]['timestamp'] * 1000);
+      if (data['relationships_following'] != null) {
+        for (var request in data['relationships_following']) {
+          if (request['string_list_data'] != null) {
+            for (var user in request['string_list_data']) {
+              DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(user['timestamp'] * 1000);
               String formattedDate =
                   "${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')} ";
 
-              usersFollowers.add(User(
-                username: user['string_list_data'][0]['value'],
-                link: user['string_list_data'][0]['href'],
+              users.add(User(
+                username: user['value'],
+                link: user['href'],
                 date: formattedDate,
               ));
             }
           }
         }
-        users = usersFollowers;
       }
 
       return users;
@@ -293,6 +328,58 @@ class ProfilePage extends StatelessWidget {
       print('JSON processing error for $fileName: $e');
       return [];
     }
+  }
+
+  List<User> processJsonDataFollowers(String jsonString, String fileName) {
+    try {
+      final data = jsonDecode(jsonString);
+      List<User> users = [];
+
+      if (data is List) {
+        for (var user in data) {
+          if (user is Map && user.containsKey('string_list_data') && user['string_list_data'] is List && user['string_list_data'].isNotEmpty) {
+            DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(user['string_list_data'][0]['timestamp'] * 1000);
+            String formattedDate =
+                "${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')} ";
+
+            users.add(User(
+              username: user['string_list_data'][0]['value'],
+              link: user['string_list_data'][0]['href'],
+              date: formattedDate,
+            ));
+          }
+        }
+      } else if (data is Map && data['relationships_followers'] != null) {
+        for (var request in data['relationships_followers']) {
+          if (request['string_list_data'] != null) {
+            for (var user in request['string_list_data']) {
+              DateTime dateTime = DateTime.fromMillisecondsSinceEpoch(user['timestamp'] * 1000);
+              String formattedDate =
+                  "${dateTime.year}-${dateTime.month.toString().padLeft(2, '0')}-${dateTime.day.toString().padLeft(2, '0')} ";
+
+              users.add(User(
+                username: user['value'],
+                link: user['href'],
+                date: formattedDate,
+              ));
+            }
+          }
+        }
+      }
+
+      return users;
+    } catch (e) {
+      print('JSON processing error for $fileName: $e');
+      return [];
+    }
+  }
+
+  List<User> removeDuplicateUsers(List<User> users) {
+    Map<String, User> userMap = {};
+    for (var user in users) {
+      userMap[user.username] = user;
+    }
+    return userMap.values.toList();
   }
 
   List<User> filterNonFollowers(List<User> followingList, List<User> followersList) {
@@ -313,7 +400,7 @@ class ProfilePage extends StatelessWidget {
     if (usersFollowing.isEmpty || usersFollowers.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Please select both following.json and followers.json files first.'),
+          content: Text('Please select both following.json and followers.json file(s) first.'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -335,16 +422,12 @@ class ProfilePage extends StatelessWidget {
 
     try {
       List<User> nonFollowers = filterNonFollowers(usersFollowing, usersFollowers);
-      for (var user in nonFollowers) {
-        print('Non-follower: ${user.username}');
-      }
-
       await dbHelper.initializeDatabase();
-      //await dbHelper.insertPendingUsers(users);
+      await dbHelper.insertNonFollowers(nonFollowers);
 
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => DontFollowPage()),
+        MaterialPageRoute(builder: (context) => DontFollowPage(nonFollowersFromFile: nonFollowers)),
       );
     } catch (e) {
       print('Error processing non-followers: $e');
@@ -388,12 +471,21 @@ class ProfilePage extends StatelessWidget {
                       subtitle: Column(
                         children: [
                           SizedBox(height: 5.0),
-                          Text('Following.json'),
+                          Row(
+                            children: [
+                              Text('Following.json'),
+                              if (followingLoaded)
+                                Padding(
+                                  padding: EdgeInsets.only(left: 8.0),
+                                  child: Icon(Icons.check_circle, color: Colors.green, size: 16),
+                                ),
+                            ],
+                          ),
                           Container(
                             width: cardWidth,
                             child: ElevatedButton(
                               onPressed: () async {
-                                await _selectFileDontFollowBack(context, 'following.json');
+                                await _selectFileDontFollowBack(context, 'following');
                               },
                               child: Text('Select Following JSON File'),
                             ),
@@ -404,21 +496,58 @@ class ProfilePage extends StatelessWidget {
                             thickness: 0.5,
                           ),
                           SizedBox(height: 2.5),
-                          Text('Followers.json'),
+                          Row(
+                            children: [
+                              Text('Followers.json'),
+                              if (followersFilesLoaded.isNotEmpty)
+                                Padding(
+                                  padding: EdgeInsets.only(left: 8.0),
+                                  child: Text(
+                                    '(${followersFilesLoaded.length} files)',
+                                    style: TextStyle(color: Colors.green, fontSize: 12),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          if (followersFilesLoaded.isNotEmpty)
+                            Container(
+                              width: cardWidth,
+                              margin: EdgeInsets.only(bottom: 8.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Loaded files:',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                                  ),
+                                  ...followersFilesLoaded.map((fileName) => 
+                                    Padding(
+                                      padding: EdgeInsets.only(left: 8.0),
+                                      child: Text(
+                                        '• $fileName',
+                                        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                                      ),
+                                    ),
+                                  ).toList(),
+                                ],
+                              ),
+                            ),
                           Container(
                             width: cardWidth,
                             child: ElevatedButton(
                               onPressed: () async {
-                                await _selectFileDontFollowBack(context, 'followers.json');
+                                await _selectMultipleFollowersFiles(context);
                               },
-                              child: Text('Select Followers JSON File'),
+                              child: Text('Select Followers JSON File(s)'),
                             ),
                           ),
                           SizedBox(height: 10.0),
                           ElevatedButton(
-                            onPressed: () {
-                              showSnackBarAndNavigateDontFollowBack(context);
-                            },
+                            onPressed: (followingLoaded && followersFilesLoaded.isNotEmpty)
+                              ? () {
+                                  showSnackBarAndNavigateDontFollowBack(context);
+                                }
+                              : null,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.black,
                             ),

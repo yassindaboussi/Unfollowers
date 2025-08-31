@@ -2,7 +2,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../theme/App_theme.dart';
 import 'package:url_launcher/url_launcher.dart';
-
 import '../database/db_helper.dart';
 import '../model/user.dart';
 
@@ -18,19 +17,47 @@ class _FavorisPageState extends State<FavorisPage> {
   @override
   void initState() {
     super.initState();
-    print("initState");
     _initializeDatabaseAndLoadData();
-    _loadFavoriteUsers();
   }
 
   Future<void> _initializeDatabaseAndLoadData() async {
     await dbHelper.initializeDatabase();
+    _loadFavoriteUsers();
   }
 
   Future<void> _loadFavoriteUsers() async {
-    List<User> users = await dbHelper.getPendingFavoriteUsers();
+    List<User> pendingFavorites = await dbHelper.getPendingFavoriteUsers();
+    List<User> nonFollowerFavorites = await dbHelper.getNonFollowerFavoriteUsers();
     setState(() {
-      favoriteUsers = users;
+      favoriteUsers = [...pendingFavorites, ...nonFollowerFavorites];
+    });
+  }
+
+  Future<void> _launchInstagram(String url) async {
+    if (url.isEmpty) {
+      print('Instagram link is null or empty.');
+      return;
+    }
+
+    try {
+      final bool nativeLaunch = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!nativeLaunch) {
+        throw 'Could not launch $url';
+      }
+    } catch (e) {
+      print('Error launching Instagram URL: $e');
+    }
+  }
+
+  void toggleFavoriteStatus(int index) {
+    setState(() {
+      favoriteUsers[index].isFavorite = !favoriteUsers[index].isFavorite;
+      dbHelper.updatePendingUserFavoriteStatus(favoriteUsers[index].id, favoriteUsers[index].isFavorite);
+      dbHelper.updateNonFollowerFavoriteStatus(favoriteUsers[index].id, favoriteUsers[index].isFavorite);
+      _loadFavoriteUsers();
     });
   }
 
@@ -41,7 +68,10 @@ class _FavorisPageState extends State<FavorisPage> {
         title: Text('Favorite Users'),
       ),
       body: FutureBuilder<List<User>>(
-        future: DatabaseHelper().getPendingFavoriteUsers(),
+        future: Future.wait([
+          dbHelper.getPendingFavoriteUsers(),
+          dbHelper.getNonFollowerFavoriteUsers(),
+        ]).then((results) => [...results[0], ...results[1]]),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return Center(child: CircularProgressIndicator());
@@ -67,11 +97,11 @@ class _FavorisPageState extends State<FavorisPage> {
                         Spacer(),
                         InkWell(
                           onTap: () {
-                           if (favoriteUsers[index].link != null) {
-                             _launchInstagram(favoriteUsers[index].link);
-                           } else {
-                             print("Instagram link is null for this user.");
-                           }
+                            if (favoriteUsers[index].link.isNotEmpty) {
+                              _launchInstagram(favoriteUsers[index].link);
+                            } else {
+                              print("Instagram link is null for this user.");
+                            }
                           },
                           child: Icon(
                             Icons.open_in_new,
@@ -94,7 +124,6 @@ class _FavorisPageState extends State<FavorisPage> {
                             : Colors.grey,
                       ),
                     ),
-                    onTap: null, // Disable card tap
                   ),
                 );
               },
@@ -104,32 +133,4 @@ class _FavorisPageState extends State<FavorisPage> {
       ),
     );
   }
-
-  void toggleFavoriteStatus(int index) {
-    setState(() {
-      favoriteUsers[index].isFavorite = !favoriteUsers[index].isFavorite;
-    });
-    dbHelper.updatePendingUserFavoriteStatus(favoriteUsers[index].id, favoriteUsers[index].isFavorite);
-  }
-
-  Future<void> _launchInstagram(String url) async {
-    if (url == null || url.isEmpty) {
-      print('Instagram link is null or empty.');
-      return;
-    }
-
-    try {
-      final bool nativeLaunch = await launch(
-        url,
-        forceSafariVC: false,
-        universalLinksOnly: true,
-      );
-      if (!nativeLaunch) {
-        throw 'Could not launch $url';
-      }
-    } catch (e) {
-      print('Error launching Instagram URL: $e');
-    }
-  }
-
 }

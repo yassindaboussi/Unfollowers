@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'database/db_helper.dart';
-import 'model/user.dart';
-import 'screens/DontFollow.dart';
-import 'screens/PendingRequest.dart';
+import 'package:unfollowers/screens/DontFollow.dart';
+import 'package:unfollowers/screens/PendingRequest.dart';
+import 'package:unfollowers/screens/ProfilePage.dart';
 
 class HomePage extends StatefulWidget {
-
   @override
   _HomePageState createState() => _HomePageState();
 }
@@ -17,8 +14,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    print("initState");
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -30,29 +26,29 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: AppBar(
-          elevation: 0,
-          toolbarHeight: 50,  // Reduced toolbar height
-          bottom: PreferredSize(
-            preferredSize: Size.fromHeight(10),  // Adjust the preferred size
-            child: TabBar(
-              controller: _tabController,
-              tabs: [
-                Tab(text: 'Pending Request'),
-                Tab(text: 'Dont follow you back'),
-              ],
-            ),
+      appBar: AppBar(
+        elevation: 0,
+        toolbarHeight: 50,
+        bottom: PreferredSize(
+          preferredSize: Size.fromHeight(10),
+          child: TabBar(
+            controller: _tabController,
+            tabs: [
+              Tab(text: 'Profile'),
+              Tab(text: 'Pending Request'),
+              Tab(text: 'Don\'t Follow Back'),
+            ],
           ),
         ),
+      ),
       body: TabBarView(
         controller: _tabController,
         children: [
+          ProfilePage(),
           PendingRequestPage(usersFromFile: null),
           DontFollowPage(),
         ],
       ),
     );
   }
-
-
 }

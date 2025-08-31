@@ -17,53 +17,96 @@ class PendingRequestPage extends StatefulWidget {
 
 class _PendingRequestPageState extends State<PendingRequestPage> with SingleTickerProviderStateMixin {
   int totalPendingUsers = 0;
-
-
   DatabaseHelper dbHelper = DatabaseHelper();
   List<User> users = [];
 
   @override
   void initState() {
     super.initState();
-    print("initState");
     _initializeDatabaseAndLoadData();
   }
-
 
   Future<void> _initializeDatabaseAndLoadData() async {
     await dbHelper.initializeDatabase();
 
-
     if (widget.usersFromFile != null) {
-/*      print("Load Data From File Json"); // read from the file (the data already saved on database so no need )
-      setState(() {
-        users = widget.usersFromFile!;
-      });*/
-      if (DatabaseHelper().isDatabaseInitialized) { // I add it to fix delete and favoris
-        CountPendingUsers();
-        loadUsers();
-      }
+      CountPendingUsers();
+      loadUsers();
     } else {
-      print("Load Data From DataBase 1");
-      if (DatabaseHelper().isDatabaseInitialized) {
-        print("Load Data From DataBase 2");
+      if (dbHelper.isDatabaseInitialized) {
         CountPendingUsers();
         loadUsers();
       }
     }
   }
 
-
   Future<void> loadUsers() async {
-
     List<User> loadedUsers = await dbHelper.getPendingUsers();
-
     if (mounted) {
       setState(() {
         users = loadedUsers;
       });
     }
+  }
 
+  Future<void> CountPendingUsers() async {
+    List<User> loadedUsers = await dbHelper.getPendingUsers();
+    if (mounted) {
+      setState(() {
+        users = loadedUsers;
+        totalPendingUsers = users.length;
+      });
+    }
+  }
+
+  Future<void> _launchInstagram(String url) async {
+    if (url.isEmpty) {
+      print('Instagram link is null or empty.');
+      return;
+    }
+
+    try {
+      final bool nativeLaunch = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!nativeLaunch) {
+        throw 'Could not launch $url';
+      }
+    } catch (e) {
+      print('Error launching Instagram URL: $e');
+    }
+  }
+
+  Future<void> _deleteUser(int? userId) async {
+    if (userId != null) {
+      User deletedUser = users.firstWhere((user) => user.id == userId);
+      HistoriqueItem historiqueItem = HistoriqueItem(
+        username: deletedUser.username,
+        link: deletedUser.link,
+        date: deletedUser.date,
+        isFavorite: deletedUser.isFavorite,
+        type: 'pending',
+      );
+      await dbHelper.insertHistoriqueItem([historiqueItem]);
+      await dbHelper.deletePendingUser(userId);
+      CountPendingUsers();
+      await loadUsers();
+    } else {
+      print('User ID is null.');
+    }
+  }
+
+  void _toggleFavorite(int index) {
+    setState(() {
+      users[index].isFavorite = !users[index].isFavorite;
+      dbHelper.updatePendingUserFavoriteStatus(users[index].id, users[index].isFavorite);
+    });
+  }
+
+  void _refreshPendingUsers() {
+    CountPendingUsers();
+    loadUsers();
   }
 
   @override
@@ -72,7 +115,7 @@ class _PendingRequestPageState extends State<PendingRequestPage> with SingleTick
       appBar: AppBar(
         backgroundColor: AppTheme.buildLightTheme().primaryColor,
         title: Text(
-          "Total : $totalPendingUsers",
+          "Total: $totalPendingUsers",
           style: TextStyle(fontSize: 20.0, fontWeight: FontWeight.bold, color: Colors.white),
         ),
         centerTitle: true,
@@ -84,14 +127,14 @@ class _PendingRequestPageState extends State<PendingRequestPage> with SingleTick
             ),
             onPressed: () {
               Navigator.push(
-                  context,
-                  MaterialPageRoute(
+                context,
+                MaterialPageRoute(
                   builder: (context) => HistoriquePage(
-                refreshCallback: () {
-                  _refreshPendingUsers();
-                },
-              ),
-              ),
+                    refreshCallback: () {
+                      _refreshPendingUsers();
+                    },
+                  ),
+                ),
               );
             },
           ),
@@ -102,7 +145,7 @@ class _PendingRequestPageState extends State<PendingRequestPage> with SingleTick
         itemBuilder: (context, index) {
           return GestureDetector(
             onTap: () {
-              if (users[index].link != null) {
+              if (users[index].link.isNotEmpty) {
                 _launchInstagram(users[index].link);
               } else {
                 print("Instagram link is null for this user.");
@@ -152,7 +195,6 @@ class _PendingRequestPageState extends State<PendingRequestPage> with SingleTick
                   onPressed: () {
                     setState(() {
                       _deleteUser(users[index].id);
-                      CountPendingUsers();
                     });
                   },
                 ),
@@ -163,72 +205,4 @@ class _PendingRequestPageState extends State<PendingRequestPage> with SingleTick
       ),
     );
   }
-
-
-
-  Future<void> _launchInstagram(String url) async {
-    if (url == null || url.isEmpty) {
-      print('Instagram link is null or empty.');
-      return;
-    }
-
-    try {
-      final bool nativeLaunch = await launch(
-        url,
-        forceSafariVC: false,
-        universalLinksOnly: true,
-      );
-      if (!nativeLaunch) {
-        throw 'Could not launch $url';
-      }
-    } catch (e) {
-      print('Error launching Instagram URL: $e');
-    }
-  }
-
-  Future<void> _deleteUser(int? userId) async {
-    if (userId != null) {
-      User deletedUser = users.firstWhere((user) => user.id == userId);
-      HistoriqueItem historiqueItem = HistoriqueItem(
-        username: deletedUser.username,
-        link: deletedUser.link,
-        date: deletedUser.date,
-        isFavorite: deletedUser.isFavorite,
-      );
-      await dbHelper.insertHistoriqueItem([historiqueItem]);
-      await dbHelper.deletePendingUser(userId);
-      CountPendingUsers();
-      await loadUsers();
-    } else {
-      print('User ID is null.');
-    }
-  }
-
-
-
-  void _toggleFavorite(int index) {
-    setState(() {
-      users[index].isFavorite = !users[index].isFavorite;
-      dbHelper.updatePendingUserFavoriteStatus(users[index].id, users[index].isFavorite);
-    });
-  }
-
-  Future<void> CountPendingUsers() async {
-    List<User> loadedUsers = await dbHelper.getPendingUsers();
-
-    if (mounted) {
-      setState(() {
-        users = loadedUsers;
-        totalPendingUsers = users.length;
-      });
-    }
-  }
-
-  void _refreshPendingUsers() {
-    CountPendingUsers();
-    loadUsers();
-  }
-
-
-
 }

@@ -4,6 +4,7 @@ class HistoriqueItem {
   final String link;
   final String date;
   bool isFavorite;
+  final String type;
 
   HistoriqueItem({
     this.id,
@@ -11,6 +12,7 @@ class HistoriqueItem {
     required this.link,
     required this.date,
     this.isFavorite = false,
+    required this.type,
   });
 
   Map<String, dynamic> toMap() {
@@ -20,6 +22,7 @@ class HistoriqueItem {
       'link': link,
       'date': date,
       'isFavorite': isFavorite ? 1 : 0,
+      'type': type,
     };
   }
 }

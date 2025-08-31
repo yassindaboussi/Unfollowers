@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../Home.dart';
 import '../theme/App_theme.dart';
 import '../screens/Favoris.dart';
-import '../screens/Profile.dart';
+import '../screens/ProfilePage.dart';
 
 
 class NavBar extends StatefulWidget {

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../database/db_helper.dart';
 import '../model/historique.dart';
 import '../model/user.dart';
@@ -27,7 +26,6 @@ class _HistoriquePageState extends State<HistoriquePage> {
 
   Future<void> _loadHistoriqueItems() async {
     await dbHelper.initializeDatabase();
-
     List<HistoriqueItem> items = await dbHelper.getHistoriqueItems();
     setState(() {
       historiqueItems = items;
@@ -35,34 +33,36 @@ class _HistoriquePageState extends State<HistoriquePage> {
   }
 
   Future<void> _restoreItem(HistoriqueItem item) async {
-    await dbHelper.insertPendingUsers([
-      User(
-        username: item.username,
-        link: item.link,
-        date: item.date,
-        isFavorite: item.isFavorite,
-      ),
-    ]);
+    User user = User(
+      username: item.username,
+      link: item.link,
+      date: item.date,
+      isFavorite: item.isFavorite,
+    );
+
+    if (item.type == 'pending') {
+      await dbHelper.insertPendingUsers([user]);
+    } else if (item.type == 'nonfollower') {
+      await dbHelper.insertNonFollowers([user]);
+    }
 
     await dbHelper.deleteHistoriqueItem(item.id);
-
     widget.refreshCallback();
     await _loadHistoriqueItems();
-
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Historique'),
+        title: Text('History'),
       ),
       body: ListView.builder(
         itemCount: historiqueItems.length,
         itemBuilder: (context, index) {
           return ListTile(
             title: Text(historiqueItems[index].username),
-            subtitle: Text(historiqueItems[index].date),
+            subtitle: Text('${historiqueItems[index].type == 'pending' ? 'Pending' : 'Non-Follower'} - ${historiqueItems[index].date}'),
             trailing: ElevatedButton(
               onPressed: () {
                 _restoreItem(historiqueItems[index]);
