@@ -1,4 +1,4 @@
-# InstaCheck �
+# InstaCheck 📷
 
 [![Flutter](https://img.shields.io/badge/Flutter-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev/)
 [![Platform: Android](https://img.shields.io/badge/Platform-Android-brightgreen?style=for-the-badge&logo=android)](https://www.android.com/)
@@ -7,13 +7,13 @@ A powerful Android application for managing your Instagram connections, tracking
 
 ## ✨ Features
 
-- 🔍 **Track Unfollowers**: Discover who unfollowed you on Instagram
-- � **Non-Followers List**: See who doesn't follow you back
-- ⏳ **Pending Requests**: Manage your pending follow requests
-- ⭐ **Favorites**: Bookmark important accounts for quick access
-- � **History**: Track changes in your followers over time
-- 🎨 **Beautiful UI**: Clean and intuitive Material Design interface
-- 🔒 **Local Storage**: Your data stays on your device
+- 🔍 **Track Unfollowers**: Discover who unfollowed you on Instagram  
+- 👤 **Non-Followers List**: See who doesn't follow you back  
+- ⏳ **Pending Requests**: Manage your pending follow requests  
+- ⭐ **Favorites**: Bookmark important accounts for quick access  
+- 📈 **History**: Track changes in your followers over time  
+- 🎨 **Beautiful UI**: Clean and intuitive Material Design interface  
+- 🔒 **Local Storage**: Your data stays on your device  
 
 ## 📱 Screenshots
 
