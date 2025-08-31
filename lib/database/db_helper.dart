@@ -20,14 +20,23 @@ class DatabaseHelper {
     if (!_isInitialized) {
       _database = await openDatabase(
         'InstaCheck_database.db',
-        version: 1,
+        version: 2,
         onCreate: (db, version) {
           db.execute(
-              'CREATE TABLE pendingusers (id INTEGER PRIMARY KEY, username TEXT, link TEXT, date TEXT, isFavorite INTEGER)');
+              'CREATE TABLE pendingusers (id INTEGER PRIMARY KEY, username TEXT, link TEXT, date TEXT, isFavorite INTEGER, source TEXT)');
           db.execute(
-              'CREATE TABLE nonfollowers (id INTEGER PRIMARY KEY, username TEXT, link TEXT, date TEXT, isFavorite INTEGER)');
+              'CREATE TABLE nonfollowers (id INTEGER PRIMARY KEY, username TEXT, link TEXT, date TEXT, isFavorite INTEGER, source TEXT)');
           db.execute(
               'CREATE TABLE historique (id INTEGER PRIMARY KEY, username TEXT, link TEXT, date TEXT, isFavorite INTEGER, type TEXT)');
+        },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            await db.execute('ALTER TABLE pendingusers ADD COLUMN source TEXT');
+            await db.execute('ALTER TABLE nonfollowers ADD COLUMN source TEXT');
+            
+            await db.execute('UPDATE pendingusers SET source = "pending" WHERE source IS NULL');
+            await db.execute('UPDATE nonfollowers SET source = "nonfollower" WHERE source IS NULL');
+          }
         },
       );
       _isInitialized = true;
@@ -36,6 +45,8 @@ class DatabaseHelper {
 
   Future<void> insertPendingUsers(List<User> users) async {
     for (var user in users) {
+      user.source = 'pending';
+      
       List<Map<String, dynamic>> existingUsers = await _database.query(
         'pendingusers',
         where: 'username = ? AND link = ?',
@@ -52,6 +63,8 @@ class DatabaseHelper {
 
   Future<void> insertNonFollowers(List<User> users) async {
     for (var user in users) {
+      user.source = 'nonfollower';
+      
       List<Map<String, dynamic>> existingUsers = await _database.query(
         'nonfollowers',
         where: 'username = ? AND link = ?',
@@ -67,7 +80,10 @@ class DatabaseHelper {
   }
 
   Future<List<User>> getPendingUsers() async {
-    final List<Map<String, dynamic>> maps = await _database.query('pendingusers');
+    final List<Map<String, dynamic>> maps = await _database.query(
+      'pendingusers',
+      orderBy: 'date DESC, username ASC',
+    );
     return List.generate(maps.length, (i) {
       return User(
         id: maps[i]['id'],
@@ -75,12 +91,16 @@ class DatabaseHelper {
         link: maps[i]['link'],
         date: maps[i]['date'],
         isFavorite: maps[i]['isFavorite'] == 1,
+        source: maps[i]['source'] ?? 'pending',
       );
     });
   }
 
   Future<List<User>> getNonFollowers() async {
-    final List<Map<String, dynamic>> maps = await _database.query('nonfollowers');
+    final List<Map<String, dynamic>> maps = await _database.query(
+      'nonfollowers',
+      orderBy: 'date DESC, username ASC',
+    );
     return List.generate(maps.length, (i) {
       return User(
         id: maps[i]['id'],
@@ -88,12 +108,71 @@ class DatabaseHelper {
         link: maps[i]['link'],
         date: maps[i]['date'],
         isFavorite: maps[i]['isFavorite'] == 1,
+        source: maps[i]['source'] ?? 'nonfollower',
+      );
+    });
+  }
+
+  Future<List<User>> getPendingFavoriteUsers() async {
+    final List<Map<String, dynamic>> maps = await _database.query(
+      'pendingusers',
+      where: 'isFavorite = ?',
+      whereArgs: [1],
+      orderBy: 'date DESC, username ASC',
+    );
+
+    return List.generate(maps.length, (i) {
+      return User(
+        id: maps[i]['id'],
+        username: maps[i]['username'],
+        link: maps[i]['link'],
+        date: maps[i]['date'],
+        isFavorite: maps[i]['isFavorite'] == 1,
+        source: maps[i]['source'] ?? 'pending',
+      );
+    });
+  }
+
+  Future<List<User>> getNonFollowerFavoriteUsers() async {
+    final List<Map<String, dynamic>> maps = await _database.query(
+      'nonfollowers',
+      where: 'isFavorite = ?',
+      whereArgs: [1],
+      orderBy: 'date DESC, username ASC',
+    );
+
+    return List.generate(maps.length, (i) {
+      return User(
+        id: maps[i]['id'],
+        username: maps[i]['username'],
+        link: maps[i]['link'],
+        date: maps[i]['date'],
+        isFavorite: maps[i]['isFavorite'] == 1,
+        source: maps[i]['source'] ?? 'nonfollower',
       );
     });
   }
 
   Future<void> deletePendingUser(int? userId) async {
     if (userId != null) {
+      List<Map<String, dynamic>> userData = await _database.query(
+        'pendingusers',
+        where: 'id = ?',
+        whereArgs: [userId],
+      );
+      
+      if (userData.isNotEmpty) {
+        HistoriqueItem historyItem = HistoriqueItem(
+          username: userData[0]['username'],
+          link: userData[0]['link'],
+          date: userData[0]['date'],
+          isFavorite: userData[0]['isFavorite'] == 1,
+          type: 'pending',
+        );
+        
+        await _database.insert('historique', historyItem.toMap());
+      }
+      
       await _database.delete(
         'pendingusers',
         where: 'id = ?',
@@ -106,6 +185,24 @@ class DatabaseHelper {
 
   Future<void> deleteNonFollower(int? userId) async {
     if (userId != null) {
+      List<Map<String, dynamic>> userData = await _database.query(
+        'nonfollowers',
+        where: 'id = ?',
+        whereArgs: [userId],
+      );
+      
+      if (userData.isNotEmpty) {
+        HistoriqueItem historyItem = HistoriqueItem(
+          username: userData[0]['username'],
+          link: userData[0]['link'],
+          date: userData[0]['date'],
+          isFavorite: userData[0]['isFavorite'] == 1,
+          type: 'nonfollower',
+        );
+        
+        await _database.insert('historique', historyItem.toMap());
+      }
+      
       await _database.delete(
         'nonfollowers',
         where: 'id = ?',
@@ -138,42 +235,6 @@ class DatabaseHelper {
     }
   }
 
-  Future<List<User>> getPendingFavoriteUsers() async {
-    final List<Map<String, dynamic>> maps = await _database.query(
-      'pendingusers',
-      where: 'isFavorite = ?',
-      whereArgs: [1],
-    );
-
-    return List.generate(maps.length, (i) {
-      return User(
-        id: maps[i]['id'],
-        username: maps[i]['username'],
-        link: maps[i]['link'],
-        date: maps[i]['date'],
-        isFavorite: maps[i]['isFavorite'] == 1,
-      );
-    });
-  }
-
-  Future<List<User>> getNonFollowerFavoriteUsers() async {
-    final List<Map<String, dynamic>> maps = await _database.query(
-      'nonfollowers',
-      where: 'isFavorite = ?',
-      whereArgs: [1],
-    );
-
-    return List.generate(maps.length, (i) {
-      return User(
-        id: maps[i]['id'],
-        username: maps[i]['username'],
-        link: maps[i]['link'],
-        date: maps[i]['date'],
-        isFavorite: maps[i]['isFavorite'] == 1,
-      );
-    });
-  }
-
   Future<void> insertHistoriqueItem(List<HistoriqueItem> items) async {
     for (var item in items) {
       await _database.insert('historique', item.toMap());
@@ -181,7 +242,29 @@ class DatabaseHelper {
   }
 
   Future<List<HistoriqueItem>> getHistoriqueItems() async {
-    final List<Map<String, dynamic>> maps = await _database.query('historique');
+    final List<Map<String, dynamic>> maps = await _database.query(
+      'historique',
+      orderBy: 'id DESC',
+    );
+    return List.generate(maps.length, (i) {
+      return HistoriqueItem(
+        id: maps[i]['id'],
+        username: maps[i]['username'],
+        link: maps[i]['link'],
+        date: maps[i]['date'],
+        isFavorite: maps[i]['isFavorite'] == 1,
+        type: maps[i]['type'],
+      );
+    });
+  }
+
+  Future<List<HistoriqueItem>> getHistoriqueItemsByType(String type) async {
+    final List<Map<String, dynamic>> maps = await _database.query(
+      'historique',
+      where: 'type = ?',
+      whereArgs: [type],
+      orderBy: 'id DESC',
+    );
     return List.generate(maps.length, (i) {
       return HistoriqueItem(
         id: maps[i]['id'],
@@ -203,6 +286,37 @@ class DatabaseHelper {
       );
     } else {
       print('Item ID is null.');
+    }
+  }
+
+  Future<void> clearHistoriqueByType(String type) async {
+    await _database.delete(
+      'historique',
+      where: 'type = ?',
+      whereArgs: [type],
+    );
+  }
+
+  Future<void> restoreFromHistory(HistoriqueItem item) async {
+    try {
+      User user = User(
+        username: item.username,
+        link: item.link,
+        date: item.date,
+        isFavorite: item.isFavorite,
+        source: item.type,
+      );
+
+      if (item.type == 'pending') {
+        await _database.insert('pendingusers', user.toMap());
+      } else if (item.type == 'nonfollower') {
+        await _database.insert('nonfollowers', user.toMap());
+      }
+
+      await deleteHistoriqueItem(item.id);
+    } catch (e) {
+      print('Error restoring item from history: $e');
+      throw e;
     }
   }
 }

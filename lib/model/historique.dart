@@ -1,10 +1,10 @@
 class HistoriqueItem {
-  final int? id;
-  final String username;
-  final String link;
-  final String date;
+  int? id;
+  String username;
+  String link;
+  String date;
   bool isFavorite;
-  final String type;
+  String type;
 
   HistoriqueItem({
     this.id,
@@ -24,5 +24,21 @@ class HistoriqueItem {
       'isFavorite': isFavorite ? 1 : 0,
       'type': type,
     };
+  }
+
+  factory HistoriqueItem.fromMap(Map<String, dynamic> map) {
+    return HistoriqueItem(
+      id: map['id'],
+      username: map['username'] ?? '',
+      link: map['link'] ?? '',
+      date: map['date'] ?? '',
+      isFavorite: (map['isFavorite'] ?? 0) == 1,
+      type: map['type'] ?? 'pending',
+    );
+  }
+
+  @override
+  String toString() {
+    return 'HistoriqueItem{id: $id, username: $username, type: $type, date: $date, isFavorite: $isFavorite}';
   }
 }
